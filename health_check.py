@@ -2,6 +2,7 @@ import yaml
 import requests
 import os
 import time
+from collections import defaultdict
 
 def find_yaml_file():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,20 +33,34 @@ def check_health(endpoint):
     except (requests.RequestException, requests.Timeout):
         return "DOWN", None
 
+def log_availability(domain_status):
+    for domain, stats in domain_status.items():
+        up_count = stats["UP"]
+        total_count = stats["total"]
+        if total_count > 0:
+            availability_percentage = round(100 * (up_count / total_count))
+            print(f"{domain} has {availability_percentage}% availability percentage")
+        else:
+            print(f"{domain} has 0% availability percentage")
 def main():
     try:
         yaml_file = find_yaml_file()
         print(f"YAML file found: {yaml_file}")
         endpoints = load_endpoints_from_yaml(yaml_file)
+        domain_status = defaultdict(lambda: {"UP": 0, "total": 0})
         print("Starting health checks... Press Ctrl+C to exit.")
         while True:
             for name, endpoint in endpoints.items():
                 status, latency = check_health(endpoint)
+                domain = endpoint["url"].split("//")[-1].split("/")[0]
+                domain_status[domain]["total"] += 1
+                if status == "UP":
+                    domain_status[domain]["UP"] += 1
                 if latency is not None:
                     print(f"{name} - {status} (Latency: {latency:.2f} ms)")
                 else:
                     print(f"{name} - {status} (No response)")
-
+                    log_availability(domain_status)
             time.sleep(15)
     except FileNotFoundError as e:
         print(e)
